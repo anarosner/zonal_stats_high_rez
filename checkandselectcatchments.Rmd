@@ -1,0 +1,539 @@
+
+```{r load libraries, set projection}
+rm(list=ls())
+library(sp)
+library(rgdal)
+library(rgeos)
+library(maptools)  
+library(raster)
+
+basedir<-"C:/ALR"
+proj4.NHD<-"+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs"
+
+```
+
+
+```{r load spatial high rez vector data}
+## load high rez vector polygon data
+setwd(file.path(basedir,"Data/StreamData/custom_delineated_CT"))
+watersheds<-readShapePoly("Watershed_prj",proj4string=CRS(proj4.NHD))
+watersheds.clipped<-readShapePoly("Watershed_prj_clip",proj4string=CRS(proj4.NHD))
+catchments<-readShapePoly("Catchment_prj",proj4string=CRS(proj4.NHD))
+
+names(watersheds)
+names(catchments)
+nrow(watersheds@data)
+nrow(catchments@data)
+
+```
+
+```{r check for unique watersheds/catchments}
+
+
+```
+
+```{r duplicate spatial objects?}
+# watersheds2<-watersheds[,"HydroID"]
+
+# row.names(watersheds2@data)<-watersheds2$HydroID
+# catchments2<-catchments[,"HydroID"]
+# row.names(catchments2@data)<-catchments2$HydroID
+
+# row.names(watersheds@data)<-NULL
+# head(watersheds)
+# row.names(catchments@data)<-NULL
+# head(catchments)
+# class(catchments)
+```
+
+```{r find the catchments w/in each watershed and save to a file}
+
+setwd(file.path(basedir,"/Models/zonal_stats_high_rez"))
+
+# for (i in 1:nrow(watersheds2))
+# j<-21217
+# testbatch<-watersheds@data[20:200,"HydroID"]
+# first<-TRUE
+# for (j in testbatch) {
+
+for (j in watersheds$HydroID) {
+  c<-c()
+  i<-which(watersheds$HydroID==j)
+  print(i)   
+  w<-watersheds[i,]
+  print(w@data)
+  # c1<-w %over% catchments2
+  wbuff<-gBuffer(w,width=-.001,id="HydroID")
+  {
+#     if (catchments$HydroID==w$HydroID) {
+      #if the catchment is the watershed
+    if (all.equal.numeric( as.vector(coordinates(w)),
+                           as.vector(coordinates(catchments[catchments$HydroID==w$HydroID,])),
+                           tolerance=0.0001)==T) {
+      #if the original (not buffered) waterhsed coordinates are identical to the 
+      #   downstream catchment (the one w/ a matching HydroID)
+      #   (the catchment is the watershed)
+#       print(paste("w:",w$HydroID,"c:",catchments@data[i,"HydroID"]))
+      c<-w$HydroID
+      print("catchment is watershed")
+      print( paste("w:",coordinates(w),"   c:",coordinates(catchments[catchments$HydroID==w$HydroID,])))
+    }
+    else {
+      #get list of all catchments w/in buffered (contracted) watershed
+      tryCatch(
+        c1<-over(wbuff,catchments,returnList=T),
+        #If there are no catchments completely contained by the contracted watershed 
+        #   because they're outside the extent of the catchments shapefile,
+        #   "over" function will return error
+        #Instead, say that the watershed consists of only the downstream catchment
+        #   (the catchment w/ the same HydroID as the watershed)
+#         with the s 
+        error=function(e) {
+          c<-j
+        }
+      )
+      #save their HydroIDs
+      if (length(c)>0) #if error wasn't generatred above
+        c<-catchments@data[c1[[1]],"HydroID"]
+    }
+  }
+  print(paste("w:",w$HydroID))
+  print(c)
+
+
+  
+#   to.write<-c(watersheds2@data[i,],c)
+#   print(to.write)
+  write.table(matrix(c(w$HydroID,c),nrow=1),"watershed_catchmentIDs.csv",append=T,quote=F,sep=",",row.names=F,col.names=F)
+#   first<-FALSE
+
+  }
+```
+
+```{r}
+  #check that the farmington values are the same from catchment and watershed
+  
+  #next, look at a *different* shapefile, of watersheds clipped to exclude catchment outline
+  #if the hydroid is in there, it means that part of the watershed is not included in the catchments we just selected
+  #if that is true, do a buffer of the cropped watershed, overlap that buffer with a shapefile of *cropped* huc12s
+  #write the huc12 ids in a separete csv, with the watershed hydroid in the first column
+  
+  #when reassembling the watershed zonal stats with spatial average, need to pull the attributes of two separate files:
+  #one of the catchments
+  #and one of the cropped hucs
+  
+  #gis work to do:
+  #create outline of catchments
+  #clip watersheds to exclude catchments outline
+  #clip huc12s to exclude catchments outline
+  #run zonal stats on non-overlapping catchments
+  #run zonal stats on non-overlapping clipped HUC12s
+  #     )
+```
+
+
+```{r}
+watersheds2@data[i,]
+c2<-over(w,catchments2,returnList=T)
+c2
+
+plot(catchments2[c2[[1]],],border="blue",add=F)
+plot(w,col="yellow",add=T)
+plot(catchments2[c2[[1]],],border="blue",add=T)
+plot(wbuff,add=T)
+
+test.ids<-read.csv("C:/Users/arosner/Desktop/farm_wshed_check.txt")
+head(test.ids)
+
+check<-0
+for (i in 1:2) {
+  #   print(  if (!all.equal( coordinates(w)[i],coordinates(catchments2[catchments2$HydroID==w$HydroID,])[i],tolerance=0.001)))
+  if (!all.equal( coordinates(w)[i],coordinates(catchments2[catchments2$HydroID==w$HydroID,])[i],tolerance=0.001))
+    check<-1
+}
+check
+
+
+
+all.equal.numeric( as.vector(coordinates(w)),as.vector(coordinates(catchments2[catchments2$HydroID==21208,])),tolerance=0.0001)==T
+
+
+
+
+print(all.equal( coordinates(w),coordinates(catchments2[catchments2$HydroID==w$HydroID,]),tolerance=0.001))
+
+```
+
+```{r load spatial raster data}
+
+```
+
+
+
+
+
+
+setwd("C:/ALR/occupancy_model_CT/zonal_stats_overlap")
+
+setwd
+i<-watersheds2$HydroID==21886
+which(i)
+
+
+class(coordinates(w)[i])
+class(coordinates(catchments2[catchments2$HydroID==w$HydroID,])[i])
+
+# plot(catchments2,add=T,border="blue")
+
+
+# plot(catchments2[which(catchments2$HydroID == c1[[1]]),])
+plot(catchments2[c1[[1]],],col="yellow")
+# plot(catchments2[c2,],border="red",add=T)
+plot(wbuff,border="blue",add=T)
+# plot(wbuff,add=T,border="red")
+
+
+
+
+
+
+# i<-which(watersheds2$HydroID==23186)
+# i
+w<-watersheds2[watersheds2$HydroID==23186,]
+# c1<-w %over% catchments2
+wbuff<-gBuffer(w,width=-.001,id="HydroID")
+c1<-over(w,catchments2,returnList=T)
+c1<-as.vector(c1$HydroID)
+c2<-over(wbuff,catchments2,returnList=T)
+c2<-as.vector(c2$HydroID)
+plot(catchments2[c1,],col="yellow")
+plot(catchments2[c2,],border="red",add=T)
+plot(wbuff,border="blue",add=T)
+# plot(wbuff,add=T,border="red")
+c1
+c2
+wbuff
+# c2<-gContains(w,catchments2)
+# 1519 %in% c3
+# c<-catchments[,]
+dim(c2)
+class(c2)
+# plot(catchments[catchments$,])
+plot(watersheds2[33,],col="red")
+plot(catchments2,border="blue",add=T,col=NA)
+plot(catchments2[c,],border="yellow",add=T)
+
+# over2<-function(outline,subsections) {
+#   buf<-gBuffer(outline,width=-1)
+#   over(buf,subsections,returnList=T)
+# }
+
+
+# cc<-gCentroid(catchments2[c3[1],])
+# for (i in 1:length(c3)) 
+#   cc[i,]<-gCentroid(catchments2[c3[i],])
+# 
+# plot(cc,col="blue",add=T)
+plot(watersheds2[33,],border="red",add=F)
+plot(catchments2[c2,],border="blue",add=T)
+
+plot(catchments2[c2,],border="blue",add=F)
+plot(catchments2[c3,],border="blue",add=F)
+
+over()
+
+
+
+
+
+###
+### load and reclassify raster data
+###
+raster.index<-c()
+raster.border<-c()
+
+impervious<-raster("C:/ALR/Data/LandData/NLCD_land_cover/clipped/imp_ctprj_nul",crs=CRS(proj4.NHD))
+road.crossings<-raster("C:/ALR/Data/LandData/TIGER_roads/cross_density",crs=CRS(proj4.NHD))
+road.density<-raster("C:/ALR/Data/LandData/TIGER_roads/road_density",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"impervious","road.crossings","road.density")
+raster.border<-c(raster.border,"state","state","state")
+
+
+
+precip<-raster("C:/ALR/Data/ClimateData/PRISM/CT_raster/annual2/prcpann_r_prj",crs=CRS(proj4.NHD))
+tmax<-raster("C:/ALR/Data/ClimateData/PRISM/CT_raster/annual2/tmax_r_prj",crs=CRS(proj4.NHD))
+tmin<-raster("C:/ALR/Data/ClimateData/PRISM/CT_raster/annual2/tmin_r_prj",crs=CRS(proj4.NHD))
+precip.nov<-raster("C:/ALR/Data/ClimateData/PRISM/CT_raster/annual2/prcp_1nov_prj",crs=CRS(proj4.NHD))
+precip.winter<-raster("C:/ALR/Data/ClimateData/PRISM/CT_raster/annual2/prcp_win_prj",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"precip","tmax","tmin","precip.nov","precip.winter")
+raster.border<-c(raster.border,"state","state","state","state","state")
+
+
+fws.wetland<-raster("C:/ALR/Data/LandData/US FWS/processed/wetland",crs=CRS(proj4.NHD))
+fws.water<-raster("C:/ALR/Data/LandData/US FWS/processed/open_water",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"fws.wetland","fws.water")
+raster.border<-c(raster.border,"watershed","watershed")
+
+glac.sed.thickness<-raster("C:/ALR/Data/LandData/CT DEEP/processed/glacsed_thick",crs=CRS(proj4.NHD))
+surf.coarse<-raster("C:/ALR/Data/LandData/CT DEEP/processed/surf_coarse",crs=CRS(proj4.NHD))
+drain.class<-raster("C:/ALR/Data/LandData/USDA_NRCS/processed/drn_class",crs=CRS(proj4.NHD))
+sand<-raster("C:/ALR/Data/LandData/USDA_NRCS/processed/prc_sand",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"glac.sed.thickness","surf.coarse","drain.class","sand")
+raster.border<-c(raster.border,"state","state","state","state")
+# raster.index<-c(raster.index,"glac.sed.thickness","surf.coarse","drain.class","sand")
+# raster.border<-c(raster.border,"state","state","state","state")
+
+
+no3<-raster("C:/ALR/Data/DepositionData/CT/no3_ctwsd_prj",crs=CRS(proj4.NHD))
+so4<-raster("C:/ALR/Data/DepositionData/CT/so4_ctwsd_prj",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"no3","so4")
+raster.border<-c(raster.border,"watershed","watershed")
+
+slope<-raster("C:/ALR/Data/TopoData/slope_prj",crs=CRS(proj4.NHD))
+elevation<-raster("C:/ALR/Data/TopoData/dem_prj",crs=CRS(proj4.NHD))
+raster.index<-c(raster.index,"slope","elevation")
+raster.border<-c(raster.border,"watershed","watershed")
+
+lcover.raster<-raster("C:/ALR/Data/LandData/NLCD_land_cover/clipped/lu_ctwshd_prj",crs=CRS(proj4.NHD))
+lcover.table<-read.csv("C:/ALR/Data/LandData/LU_classifications/nlcd_classes_and_categories.csv")
+
+
+#reclassify land cover in various ways, to create binary rasters of different categories
+names(lcover.table)
+# categories<-names(lcover.table)[3:length(names(lcover.table))]
+categories<-names(lcover.table)[3:8]  #decided not to include wetland and water from nlcd, will use FWS wetland inventory instead
+categories2<-gsub("_",".",categories)
+categories2<-paste0("nlcd.",categories2)
+categories
+categories2
+
+setwd("C:/ALR/Data/LandData/NLCD_land_cover/clipped/reclassified")
+start.time<-proc.time()[3]
+for (i in 1:length(categories)) {
+  assign(categories2[i],subs(lcover.raster,lcover.table,which=categories[i],subsWithNA=F))
+  print(paste0(categories2[i],": ",(proc.time()[3]-start.time)/60))
+  writeRaster(get(categories2[i]),paste0("nlcd_",categories[i],".tif"),"GTiff")
+}
+(proc.time()[3]-start.time)/60
+
+xforest<-raster("forest_prj",crs=CRS(proj4.NHD))
+plot(xforest)
+
+raster.index<-c(raster.index,categories2)
+raster.border<-c(raster.border,rep("watershed",length(categories2)))
+
+# writeRaster(get(categories2[i]),paste0(categories[i]),"raster")
+
+
+raster.index
+raster.border
+
+
+# by.HydroID<-watersheds@data[order(watersheds@data$HydroID),]
+# by.HydroID$index<-row.names(by.HydroID)
+# #just checking to make sure that the two shapefiles are in the same order, as they should be
+# by.HydroID2<-watersheds.clipped@data[order(watersheds.clipped@data$HydroID),]
+# by.HydroID2$index<-row.names(by.HydroID2)
+# test<-by.HydroID$HydroID-by.HydroID2$HydroID
+# sum(test)
+
+
+
+
+
+
+
+
+
+### 
+### start zonal statistics 
+###
+
+setwd("C:/ALR/occupancy_model_CT/zonal_stats_overlap")
+
+### this creates an empty data.frame
+zonal.stats<-data.frame(matrix(ncol=length(raster.index)+3,nrow=0)) 
+names(zonal.stats)<-c("HydroID",raster.index,"elev.max","elev.min")
+zonal.stats
+errors1<-c()
+errors2<-c()
+errors3<-c()
+# errors.raster1<-data.frame(HydroID=integer(),ii=integer(),stringsAsFactors=F)
+# errors.raster2<-data.frame(HydroID=integer(),ii=integer(),raster.layer=character(),stringsAsFactors=F)
+# errors.zonal<-data.frame(HydroID=integer(),ii=integer(),stringsAsFactors=F)
+
+# ii<-0
+
+### big loop (though watersheds) ###
+start.time<-proc.time()[3]
+# for (i in 1:nrow(watersheds)) {
+# for (i in by.HydroID$index) {
+#   i<-as.character(i)
+#   ii<-ii+1
+for (i in 1:nrow(watersheds)) {
+  #   i<-as.character(by.HydroID$index[ii])
+  assign("flag1",0,envir=.GlobalEnv)
+  
+  
+  
+  #
+  ### create raster of current watershed from poylgon
+  #
+  r<-raster(ncol=180, nrow=180) #create a generic raster
+  tryCatch(
+    extent(r)<-extent(watersheds[i,]), #set generic raster's extent to that of current watershed feature
+    error=function(err) {
+      print(paste0("error in resample, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+      assign("flag1",1,envir=.GlobalEnv)
+    })
+  tryCatch(
+    wshed.raster.watershed<-rasterize(x=watersheds[i,],r,field="HydroID",silent=T), #rasterize current feature, 
+    error=function(err) {
+      print(paste0("error in resample, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+      assign("flag1",1,envir=.GlobalEnv)
+    })
+  tryCatch(
+    extent(r)<-extent(watersheds.clipped[i,]), #set generic raster's extent to that of current watershed feature
+    error=function(err) {
+      print(paste0("error in resample, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+      assign("flag1",1,envir=.GlobalEnv)
+    })
+  tryCatch(
+    wshed.raster.state<-rasterize(x=watersheds.clipped[i,],r,field="HydroID",silent=T), #rasterize current feature
+    error=function(err) {
+      print(paste0("error in resample, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+      assign("flag1",1,envir=.GlobalEnv)
+    })
+  #if failed to create raster from polygon
+  if (flag1 ==1 ) {
+    assign(errors1,c(errors1,watersheds@data[i,"HydroID"]))
+    #     assign(errors.raster1[nrow(errors.raster)+1,]<-c(watersheds@data[i,"HydroID"]),ii)
+  }
+  
+  #
+  ### crop
+  #
+  if (flag1 ==0 ) { #(didn't fail when creating raster from polygon), otherwise, skip everythign for this watershed
+    for (j in 1:length(raster.index)) {
+      assign("flag2",0,envir=.GlobalEnv)
+      assign("flag3",0,envir=.GlobalEnv)
+      
+      #for raster layers that only have data w/in the state border, use the watershed features clipped to buffered border of CT
+{if (raster.border[j]=="state")
+  wshed.raster<-wshed.raster.state
+ else
+   wshed.raster<-wshed.raster.watershed
+      }
+      
+      #crop the base raster to the extents of the current feature
+      #snap=out means that it will include cells that intersect the border
+      #which also means it won't be the exact same size as the extent specified
+      #       print(paste("before crop,",raster.index[j]))
+      tryCatch(
+        base<-crop( get(raster.index[j]), extent(wshed.raster),snap="out"),
+        error=function(err) {
+          print(paste0("caught error in crop ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," border ",raster.border[j],", --- ",err))
+          base0=extend( get(raster.index[j]), extent(watersheds[i,]))
+          tryCatch(
+            assign("base",crop( base0, extent(wshed.raster),snap="out"),envir=.GlobalEnv),
+            error=function(err) {
+              print(paste0("error in crop not resolved by extend command, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," border ",raster.border[j],", --- ",err))
+              assign("flag2",1,envir=.GlobalEnv)                
+            })
+        }
+      )    
+      
+      #failed for this particular raster layer (and this particular watershed) to crop
+      if (flag2 ==1 ) {
+        #           assign(errors2[nrow(errors2)+1,],c(watersheds@data[i,"HydroID"],ii,raster.index[j]))
+        assign("errors2",c(errors2,watersheds@data[i,"HydroID"]))
+      }
+      
+      
+      #
+      ### resample
+      #
+      
+      if (flag2 == 0) { #didn't fail when cropping/resampling this particular raster/watershed
+        #match extents
+        #this is necessary because since we used snap="out", base is now slightly larger than wshed extent to include edges
+        #and it rounds off w/ slightly different decimal points
+        tryCatch(
+          extent(wshed.raster)<-extent(base), 
+          error=function(err) {
+            print(paste0("error in extent, skip watershed ",watersheds@data[i,"HydroID"]," (",i,") column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+            assign("flag3",1,envir=.GlobalEnv)
+          }) 
+        
+        #match resolutions and crop again
+        #resolutions must match for zonal function
+        #this changes the base resolution to match the selected feature resolution, 
+        #and crops it exactly to the feature's extent
+        tryCatch(
+          base2<-resample(base,wshed.raster,method="ngb"), 
+          error=function(err) {
+            print(paste0("error in resample, skip watershed ",watersheds@data[i,"HydroID"],", column ",raster.index[j]," extent ",raster.border[j],", --- ",err))
+            assign("flag3",1,envir=.GlobalEnv)
+          }) 
+        #failed for this particular raster layer (and this particular watershed) to resample
+        if (flag3 ==1 ) {                           
+          assign("errors3",c(errors3,watersheds@data[i,"HydroID"]))
+        }          
+        
+        #calculate zonal statistics
+        
+        
+        if (flag3==0 ) { #didn't fail for this particular raster/watershed to crop or resample
+{
+  if (j == 1 )
+    zonal.stats[i,c("HydroID",raster.index[j])]<-zonal(base2, wshed.raster, stat='mean', na.rm=TRUE) 
+  else 
+    zonal.stats[i,raster.index[j]]<-zonal(base2, wshed.raster, stat='mean', na.rm=TRUE)[2] 
+}
+#get hydroid and mean of base raster layer 
+if (raster.index[j]=="elevation") {
+  zonal.stats[i,"elev.max"]<-zonal(base2, wshed.raster, stat='max', na.rm=TRUE)[2] 
+  zonal.stats[i,"elev.min"]<-zonal(base2, wshed.raster, stat='min', na.rm=TRUE)[2]             
+}
+        }#end third flag check
+        
+      }#end second flag check
+      
+      
+      rm(list=c("base","base2","base0"))
+    }#end j loop, through raster columns  
+  }#end first check for flag  
+  
+  
+  
+  #   print(paste0("Completed, not saved through i ",i, ", ii ", ii, ", HydroID ", watersheds@data[i,"HydroID"]))
+  #to save processing time, this writes to a file every 25th feature
+  #could write to file every time, or only at the end
+  if ( i>25 & (i %% 25) == 1) {
+    is.first<-((i-25)==1)
+    write.table(zonal.stats[c((i-25):(i-1)),],"zonal_stats_5_10.csv",append=(!is.first),quote=F,sep=",",row.names=F,col.names=is.first)
+    write.table(errors1,"errors1.csv")
+    write.table(errors2,"errors2.csv")
+    write.table(errors3,"errors3.csv")  
+    print(paste0(round((proc.time()[3]-start.time)/60,digits=2), " minutes. Feature #",i,", HydroID ",watersheds@data[i,"HydroID"]))
+  }
+  
+  rm(list=c("wshed.raster.watershed","wshed.raster.state","wshed.raster","r"))
+  
+}#end i loop, through watersheds
+
+end.time<-proc.time()[3]
+print(paste0("Time elapsed: ",round((end.time-start.time)/60,digits=2), " minutes"))
+
+print(errors1)
+print(errors2)
+print(errors3)
+
+# list(compData, as.list(c(5,443)x<-data.frame(a=0,b="jhkh")))
+# library(data.table)
+# x<-data.frame(a=integer(),b=integer(),c=character(),stringsAsFactors=F)
+# x[nrow(x)+1,]<-c(5234,34,"sdfd")
+# x
+# 
+# x<-rbindlist(list(x, list(a=5,b="sdfs")))
+# x
