@@ -55,9 +55,9 @@ setwd(file.path(basedir,"/Models/zonal_stats_high_rez"))
 # testbatch<-watersheds@data[20:200,"HydroID"]
 # first<-TRUE
 # for (j in testbatch) {
-
+c1<-NULL
 for (j in watersheds$HydroID) {
-  c<-c()
+#   c<-c()
   i<-which(watersheds$HydroID==j)
   print(i)   
   w<-watersheds[i,]
@@ -65,6 +65,7 @@ for (j in watersheds$HydroID) {
   # c1<-w %over% catchments2
   wbuff<-gBuffer(w,width=-.001,id="HydroID")
   {
+    c<-w$HydroID
 #     if (catchments$HydroID==w$HydroID) {
       #if the catchment is the watershed
     if (all.equal.numeric( as.vector(coordinates(w)),
@@ -74,13 +75,13 @@ for (j in watersheds$HydroID) {
       #   downstream catchment (the one w/ a matching HydroID)
       #   (the catchment is the watershed)
 #       print(paste("w:",w$HydroID,"c:",catchments@data[i,"HydroID"]))
-      c<-w$HydroID
+      
       print("catchment is watershed")
       print( paste("w:",coordinates(w),"   c:",coordinates(catchments[catchments$HydroID==w$HydroID,])))
     }
     else {
       #get list of all catchments w/in buffered (contracted) watershed
-      tryCatch(
+      try(
         c1<-over(wbuff,catchments,returnList=T),
         #If there are no catchments completely contained by the contracted watershed 
         #   because they're outside the extent of the catchments shapefile,
@@ -88,13 +89,15 @@ for (j in watersheds$HydroID) {
         #Instead, say that the watershed consists of only the downstream catchment
         #   (the catchment w/ the same HydroID as the watershed)
 #         with the s 
-        error=function(e) {
-          c<-j
-        }
+        #         error=function(e) {
+        #           c<-j
+        #         }
       )
       #save their HydroIDs
-      if (length(c)>0) #if error wasn't generatred above
+        #       if (length(c)>0) #if error wasn't generatred above
+      if (!is.null(c1))
         c<-catchments@data[c1[[1]],"HydroID"]
+      c1<-NULL
     }
   }
   print(paste("w:",w$HydroID))
